@@ -9,7 +9,7 @@ body {
 #thumbs {
     position: relative;
     display: grid;
-    grid-template-columns: repeat(10, 1fr);
+    grid-template-columns: repeat(8, 1fr);
     gap: 0;
     width: 100%;
     z-index: 100;
