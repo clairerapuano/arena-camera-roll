@@ -38,13 +38,19 @@ function createThumbnail(item) {
 
 async function fetchPage(page = 1, per = 100) {
     try {
+        // Add delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         // Fix the URL construction
         const url = `${api}${channel_title}/contents?page=${page}&per=${per}&direction=desc`;
         console.log("Fetching URL:", url);
         
         const response = await fetch(url, {
             method: 'GET',
-            headers: { 'Cache-Control': 'no-cache' }
+            headers: { 
+                'Cache-Control': 'no-cache',
+                'User-Agent': 'Mozilla/5.0 (compatible; CameraRoll/1.0)'
+            }
         });
         
         if (!response.ok) {
