@@ -10,7 +10,7 @@ const thumbs_el = document.querySelector('#thumbs');
 // Create loading indicator
 const loadingEl = document.createElement('div');
 loadingEl.id = 'loading';
-loadingEl.innerHTML = '<p>camera roll is loading...</p>';
+loadingEl.innerHTML = '<p>claire\'s camera roll is loading...</p>';
 document.body.appendChild(loadingEl);
 
 let allImages = [];
@@ -113,12 +113,25 @@ let currentImageIndex = -1;
 
 // Function to show image at specific index
 function showImage(index) {
+    // Get array of all thumbnail elements
     const thumbs = Array.from(thumbs_el.children);
+
+    // Only proceed if index is valid (between 0 and number of thumbnails)
     if (index >= 0 && index < thumbs.length) {
+        // Get the img element from the thumbnail at this index
         const img = thumbs[index].querySelector('img');
+        
+        // Show the viewer element by setting display to flex
         viewer.style.display = 'flex';
+        
+        // Show the large image element inside viewer
         viewer_img.style.display = 'block';
+        
+        // Set the source of the large image to the data-large attribute
+        // stored on the thumbnail image
         viewer_img.src = img.dataset.large;
+        
+        // Keep track of which image is currently being viewed
         currentImageIndex = index;
     }
 }
