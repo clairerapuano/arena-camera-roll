@@ -33,13 +33,17 @@ function createThumbnail(item) {
         thumbs_el.appendChild(thumb_el);
         uniqueUrls.add(item.image.display.url);
         allImages.push(item);
+        
+        // Preload the full-size image for faster viewing
+        const preloadImg = new Image();
+        preloadImg.src = item.image.display.url;
     }
 }
 
-async function fetchPage(page = 1, per = 100) {
+async function fetchPage(page = 1, per = 200) {
     try {
-        // Add delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Add small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 300));
         
         // Fix the URL construction
         const url = `${api}${channel_title}/contents?page=${page}&per=${per}&direction=desc`;
