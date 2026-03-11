@@ -71,11 +71,11 @@ p {
     justify-content: center;
     align-items: center;
     height: 100vh;
-    z-index: 1;
+    z-index: 500;
     font-size: 14px;
 }
 #loading p {
-    color: rgb(192, 155, 221);
+    color: rgb(155, 221, 164);
     font-family: CedarvilleCursive, Geneva, Tahoma, sans-serif;
     font-size: 18px;
 }
