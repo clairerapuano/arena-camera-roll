@@ -24,7 +24,7 @@ function createThumbnail(item) {
     if (item.type === 'Image' && thumbUrl && displayUrl && !uniqueUrls.has(displayUrl)) {
         let thumb_el = document.createElement('div');
         thumb_el.classList.add('thumb');
-        thumb_el.innerHTML = `<img src="${thumbUrl}" data-large="${displayUrl}">`;
+        thumb_el.innerHTML = `<img src="${thumbUrl}" data-large="${displayUrl}" loading="lazy">`;
         thumb_el.classList.add('image');
         
         // Add click listener immediately for each thumbnail
@@ -36,10 +36,6 @@ function createThumbnail(item) {
         thumbs_el.appendChild(thumb_el);
         uniqueUrls.add(displayUrl);
         allImages.push(item);
-        
-        // Preload the full-size image for faster viewing
-        const preloadImg = new Image();
-        preloadImg.src = displayUrl;
     }
 }
 
@@ -48,7 +44,10 @@ async function fetchPage(page = 1, per = 50, retries = 3) {
     
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
-            await new Promise(resolve => setTimeout(resolve, 600));
+            // Skip delay on first request; short delay on subsequent to avoid rate limits
+            if (page > 1) {
+                await new Promise(resolve => setTimeout(resolve, 250));
+            }
             
             const response = await fetch(url, {
                 method: 'GET',
@@ -89,7 +88,7 @@ async function fetchPage(page = 1, per = 50, retries = 3) {
     return null;
 }
 
-const PER_PAGE = 50;
+const PER_PAGE = 100;
 
 function showError(msg) {
     loadingEl.innerHTML = `<p>${msg}</p><button id="retry-btn" style="margin-top:12px;padding:8px 16px;cursor:pointer;font-family:inherit;font-size:14px;background:rgb(155,221,164);color:#000;border:none;border-radius:4px;">Retry</button>`;
@@ -189,6 +188,17 @@ function showImage(index) {
         
         // Keep track of which image is currently being viewed
         currentImageIndex = index;
+        
+        // Preload adjacent images for smooth arrow navigation
+        [index - 1, index + 1].forEach(i => {
+            if (i >= 0 && i < thumbs.length) {
+                const adj = thumbs[i].querySelector('img');
+                if (adj?.dataset.large) {
+                    const preload = new Image();
+                    preload.src = adj.dataset.large;
+                }
+            }
+        });
     }
 }
 
