@@ -1,8 +1,8 @@
 // Enter the Are.na channel slug here. It has to be an open or closed channel. Private channels are not supported.
 let channel_title = 'camera-roll-nnn9n8atmm0';
 
-// Are.na's base API url
-const api = 'https://api.are.na/v2/channels/';
+// Are.na's base API url (V3 - V2 is deprecated)
+const api = 'https://api.are.na/v3/channels/';
 
 // Get grid element from index.html
 const thumbs_el = document.querySelector('#thumbs');
@@ -17,11 +17,14 @@ let allImages = [];
 let uniqueUrls = new Set();
 
 // Function to create and append thumbnail elements
+// V3 API: item.type === 'Image', item.image has small/medium/large/square with .src
 function createThumbnail(item) {
-    if (item.class == 'Image' && !uniqueUrls.has(item.image.display.url)) {
+    const thumbUrl = item.image?.square?.src ?? item.image?.small?.src;
+    const displayUrl = item.image?.large?.src ?? item.image?.medium?.src ?? item.image?.src;
+    if (item.type === 'Image' && thumbUrl && displayUrl && !uniqueUrls.has(displayUrl)) {
         let thumb_el = document.createElement('div');
         thumb_el.classList.add('thumb');
-        thumb_el.innerHTML = `<img src="${item.image.thumb.url}" data-large="${item.image.display.url}">`;
+        thumb_el.innerHTML = `<img src="${thumbUrl}" data-large="${displayUrl}">`;
         thumb_el.classList.add('image');
         
         // Add click listener immediately for each thumbnail
@@ -31,43 +34,72 @@ function createThumbnail(item) {
         });
         
         thumbs_el.appendChild(thumb_el);
-        uniqueUrls.add(item.image.display.url);
+        uniqueUrls.add(displayUrl);
         allImages.push(item);
         
         // Preload the full-size image for faster viewing
         const preloadImg = new Image();
-        preloadImg.src = item.image.display.url;
+        preloadImg.src = displayUrl;
     }
 }
 
-async function fetchPage(page = 1, per = 200) {
-    try {
-        // Add small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        // Fix the URL construction
-        const url = `${api}${channel_title}/contents?page=${page}&per=${per}&direction=desc`;
-        console.log("Fetching URL:", url);
-        
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: { 
-                'Cache-Control': 'no-cache',
-                'User-Agent': 'Mozilla/5.0 (compatible; CameraRoll/1.0)'
+async function fetchPage(page = 1, per = 50, retries = 3) {
+    const url = `${api}${channel_title}/contents?page=${page}&per=${per}&sort=position_desc`;
+    
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            await new Promise(resolve => setTimeout(resolve, 600));
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: { 
+                    'Cache-Control': 'no-cache',
+                    'User-Agent': 'Mozilla/5.0 (compatible; CameraRoll/1.0)'
+                }
+            });
+            
+            if (response.status === 429) {
+                const resetIn = response.headers.get('X-RateLimit-Reset');
+                const waitMs = resetIn ? (parseInt(resetIn, 10) * 1000 - Date.now()) : 60000;
+                console.warn('Rate limited. Waiting', Math.round(waitMs / 1000), 's before retry...');
+                await new Promise(resolve => setTimeout(resolve, Math.min(waitMs, 60000)));
+                continue;
             }
-        });
-        
-        if (!response.ok) {
-            console.error("API request failed:", response.status, response.statusText);
+            
+            if (!response.ok) {
+                console.error("API request failed:", response.status, response.statusText);
+                if (attempt < retries) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    continue;
+                }
+                return null;
+            }
+            
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error fetching page:', error);
+            if (attempt < retries) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                continue;
+            }
             return null;
         }
-        
-        const data = await response.json();
-        return data;
-    } catch (error) {
-        console.error('Error fetching page:', error);
-        return null;
     }
+    return null;
+}
+
+const PER_PAGE = 50;
+
+function showError(msg) {
+    loadingEl.innerHTML = `<p>${msg}</p><button id="retry-btn" style="margin-top:12px;padding:8px 16px;cursor:pointer;font-family:inherit;font-size:14px;background:rgb(155,221,164);color:#000;border:none;border-radius:4px;">Retry</button>`;
+    document.getElementById('retry-btn').onclick = () => {
+        allImages = [];
+        uniqueUrls.clear();
+        thumbs_el.innerHTML = '';
+        loadingEl.innerHTML = '<p>claire\'s camera roll is loading...</p>';
+        fetchAllContents();
+    };
 }
 
 async function fetchAllContents() {
@@ -77,38 +109,52 @@ async function fetchAllContents() {
     
     while (hasMore) {
         console.log(`Fetching page ${page}...`);
-        const data = await fetchPage(page, 5);
+        const data = await fetchPage(page, PER_PAGE);
         
-        // Check if data is valid and has contents
-        if (!data || !data.contents) {
+        // V3 API returns { data: [...], meta: { has_more_pages, ... } }
+        const contents = data?.data ?? data?.contents;
+        if (!data || !contents) {
             console.error("Invalid data returned from API:", data);
-            break;
+            showError('Couldn\'t load images. The channel may be private or the API is temporarily unavailable.');
+            return;
         }
         
-        console.log(`Got ${data.contents.length} items from API`);
+        console.log(`Got ${contents.length} items from API`);
         
-        data.contents.forEach(block => {
+        contents.forEach(block => {
             createThumbnail(block);
         });
 
-        // Set favicon using first image (only on first page)
-        if (page === 1 && data.contents.length > 0) {
-            const firstImage = data.contents[0];
-            if (firstImage.class === 'Image') {
-                const favicon = document.createElement('link');
-                favicon.rel = 'icon';
-                favicon.href = firstImage.image.thumb.url;
-                document.head.appendChild(favicon);
+        // Hide loading as soon as first images appear (don't wait for all pages)
+        if (page === 1 && allImages.length > 0) {
+            loadingEl.style.display = 'none';
+        }
+
+        if (page === 1 && contents.length > 0) {
+            const firstImage = contents.find(b => b.type === 'Image' || b.class === 'Image');
+            if (firstImage?.image) {
+                const thumbUrl = firstImage.image.square?.src ?? firstImage.image.thumb?.url ?? firstImage.image.small?.src;
+                if (thumbUrl) {
+                    const favicon = document.createElement('link');
+                    favicon.rel = 'icon';
+                    favicon.href = thumbUrl;
+                    document.head.appendChild(favicon);
+                }
             }
         }
         
-        hasMore = data.contents.length === 5;
+        const meta = data.meta;
+        hasMore = meta?.has_more_pages ?? (contents.length === PER_PAGE);
         page++;
     }
     
-    // Hide loading element when done
-    loadingEl.style.display = 'none';
     console.log(`Loaded ${allImages.length} unique images`);
+
+    if (allImages.length === 0) {
+        showError('No images found in this channel. Make sure the channel has image blocks and is public.');
+    } else {
+        loadingEl.style.display = 'none';
+    }
 }
 
 // Start fetching contents
