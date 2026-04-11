@@ -16,16 +16,37 @@ document.body.appendChild(loadingEl);
 let allImages = [];
 let uniqueUrls = new Set();
 
+// Smaller URL to show in the viewer first while the full-size image downloads (same file when only one size exists).
+function quickPreviewUrl(item, thumbUrl, finalUrl) {
+    if (!finalUrl) return '';
+    const med = item.image?.medium?.src;
+    const sm = item.image?.small?.src;
+    if (med && med !== finalUrl) return med;
+    if (sm && sm !== finalUrl) return sm;
+    if (thumbUrl && thumbUrl !== finalUrl) return thumbUrl;
+    return '';
+}
+
 // Function to create and append thumbnail elements
 // V3 API: item.type === 'Image', item.image has small/medium/large/square with .src
 function createThumbnail(item) {
     const thumbUrl = item.image?.square?.src ?? item.image?.small?.src;
-    const displayUrl = item.image?.large?.src ?? item.image?.medium?.src ?? item.image?.src;
-    if (item.type === 'Image' && thumbUrl && displayUrl && !uniqueUrls.has(displayUrl)) {
+    const finalUrl = item.image?.large?.src ?? item.image?.medium?.src ?? item.image?.src;
+    const quickUrl = quickPreviewUrl(item, thumbUrl, finalUrl);
+    if (item.type === 'Image' && thumbUrl && finalUrl && !uniqueUrls.has(finalUrl)) {
         let thumb_el = document.createElement('div');
         thumb_el.classList.add('thumb');
-        thumb_el.innerHTML = `<img src="${thumbUrl}" data-large="${displayUrl}" loading="lazy">`;
+        thumb_el.innerHTML = `<img src="${thumbUrl}" data-large="${finalUrl}" data-quick="${quickUrl}" loading="lazy">`;
         thumb_el.classList.add('image');
+
+        thumb_el.addEventListener('pointerenter', () => {
+            const im = thumb_el.querySelector('img');
+            if (im?.dataset.large && !im.dataset.prefetched) {
+                im.dataset.prefetched = '1';
+                const pre = new Image();
+                pre.src = im.dataset.large;
+            }
+        }, { passive: true });
         
         // Add click listener immediately for each thumbnail
         thumb_el.addEventListener('click', e => {
@@ -34,7 +55,7 @@ function createThumbnail(item) {
         });
         
         thumbs_el.appendChild(thumb_el);
-        uniqueUrls.add(displayUrl);
+        uniqueUrls.add(finalUrl);
         allImages.push(item);
     }
 }
@@ -165,6 +186,7 @@ const viewer_img = document.querySelector('#viewer img');
 
 // Track current image index
 let currentImageIndex = -1;
+let viewerLoadGen = 0;
 
 // Function to show image at specific index
 function showImage(index) {
@@ -173,21 +195,32 @@ function showImage(index) {
 
     // Only proceed if index is valid (between 0 and number of thumbnails)
     if (index >= 0 && index < thumbs.length) {
-        // Get the img element from the thumbnail at this index
         const img = thumbs[index].querySelector('img');
-        
-        // Show the viewer element by setting display to flex
-        viewer.style.display = 'flex';
-        
-        // Show the large image element inside viewer
-        viewer_img.style.display = 'block';
-        
-        // Set the source of the large image to the data-large attribute
-        // stored on the thumbnail image
-        viewer_img.src = img.dataset.large;
-        
-        // Keep track of which image is currently being viewed
+        const hi = img.dataset.large;
+        const quick = img.dataset.quick;
+        const gen = ++viewerLoadGen;
+
         currentImageIndex = index;
+
+        viewer.style.display = 'flex';
+        viewer_img.style.display = 'block';
+        viewer_img.fetchPriority = 'high';
+
+        if (quick && quick !== hi) {
+            viewer_img.src = quick;
+            const up = new Image();
+            up.onload = () => {
+                if (gen !== viewerLoadGen) return;
+                viewer_img.src = hi;
+            };
+            up.onerror = () => {
+                if (gen !== viewerLoadGen) return;
+                viewer_img.src = hi;
+            };
+            up.src = hi;
+        } else {
+            viewer_img.src = hi;
+        }
         
         // Preload adjacent images for smooth arrow navigation
         [index - 1, index + 1].forEach(i => {
@@ -206,6 +239,7 @@ function showImage(index) {
 function closeViewer() {
     viewer.style.display = 'none';
     viewer_img.src = '';
+    viewer_img.fetchPriority = 'auto';
     currentImageIndex = -1;
 }
 
