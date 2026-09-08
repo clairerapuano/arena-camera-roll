@@ -1,5 +1,5 @@
 // Enter the Are.na channel slug here. It has to be an open or closed channel. Private channels are not supported.
-let channel_title = 'camera-roll-nnn9n8atmm0';
+let channel_title = 'camera-roll-l5gu-ae1_og';
 
 // Are.na's base API url (V3 - V2 is deprecated)
 const api = 'https://api.are.na/v3/channels/';
@@ -15,6 +15,13 @@ document.body.appendChild(loadingEl);
 
 let allImages = [];
 let uniqueUrls = new Set();
+
+// Lightbox performance (keep these together — regressions feel like a “slow tap”):
+// - Thumbs only load square/small; the large URL is a separate request. Don’t set the viewer <img>
+//   straight to the large file as the only step on open.
+// - Progressive: show data-quick (medium/small/thumb) first, then swap to data-large when ready.
+// - Prefetch data-large once on pointerenter so hover-before-click often hits cache.
+// - Use fetchPriority "high" on the viewer image while opening.
 
 // Smaller URL to show in the viewer first while the full-size image downloads (same file when only one size exists).
 function quickPreviewUrl(item, thumbUrl, finalUrl) {
